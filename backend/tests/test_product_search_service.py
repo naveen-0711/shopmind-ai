@@ -1,7 +1,8 @@
 
 import pytest
+import asyncio
 
-
+from app.ingestion.search_base import ProductSearchProvider
 from app.schemas.product import Product
 from app.services.product_search_service import ProductSearchService
 
@@ -521,3 +522,52 @@ async def test_search_service_persists_products():
         == results[0].price
     )
 
+class DuplicateSearchProvider(ProductSearchProvider):
+    def can_search(self, query: str) -> bool:
+        return True
+
+    async def search(
+        self,
+        query: str,
+        max_price: float | None = None,
+        min_rating: float | None = None,
+        limit: int = 10,
+    ) -> list[dict]:
+        return [
+            {
+                "title": "Samsung Galaxy A56",
+                "price": 29999,
+                "rating": 4.5,
+                "review_count": 1200,
+                "image_url": "https://example.com/a56.jpg",
+                "product_url": "https://example.com/a56",
+                "source": "Amazon",
+                "currency": "INR",
+            },
+            {
+                "title": "Samsung Galaxy A56",
+                "price": 28999,
+                "rating": 4.5,
+                "review_count": 1200,
+                "image_url": "https://example.com/a56.jpg",
+                "product_url": "https://example.com/a56",
+                "source": "Flipkart",
+                "currency": "INR",
+            },
+        ]
+
+
+def test_product_search_removes_duplicate_products():
+    service = ProductSearchService(
+        providers=[DuplicateSearchProvider()]
+    )
+
+    products = asyncio.run(
+        service.search(
+            query="Samsung phone",
+            limit=10,
+        )
+    )
+
+    assert len(products) == 1
+    assert products[0].title == "Samsung Galaxy A56"

@@ -57,6 +57,41 @@ class ProductSearchService:
     def parse_query(self, query: str):
         return self.query_parser.parse(query)
 
+    def _deduplicate_products(
+        self,
+        products: list[Product],
+    ) -> list[Product]:
+        """
+        Remove duplicate products using product URL and
+        product title as the product identity.
+        """
+
+        unique_products: list[Product] = []
+        seen: set[tuple[str, str]] = set()
+
+        for product in products:
+
+            product_url = (
+                product.product_url.strip().lower()
+            )
+
+            product_title = (
+                product.title.strip().lower()
+            )
+
+            identity = (
+                product_url,
+                product_title,
+            )
+
+            if identity in seen:
+                continue
+
+            seen.add(identity)
+            unique_products.append(product)
+
+        return unique_products
+
     async def search(
         self,
         query: str,
@@ -130,15 +165,22 @@ class ProductSearchService:
             filtered_results.append(product)
 
         # -----------------------------------------
-        # 4. Rank products
+        # 4. Remove duplicate products
+        # -----------------------------------------
+        unique_results = self._deduplicate_products(
+            filtered_results
+        )
+
+        # -----------------------------------------
+        # 5. Rank products
         # -----------------------------------------
         ranked_results = self.ranking_service.rank(
-            filtered_results,
+            unique_results,
             limit=limit,
         )
 
         # -----------------------------------------
-        # 5. Persist products + price observations
+        # 6. Persist products + price observations
         # -----------------------------------------
         if self.persistence_service is not None:
 
@@ -156,7 +198,7 @@ class ProductSearchService:
                 )
 
         # -----------------------------------------
-        # 6. Analyze price history + deal status
+        # 7. Analyze price history + deal status
         # -----------------------------------------
         if (
             self.persistence_service is not None
@@ -183,10 +225,16 @@ class ProductSearchService:
                     history=history,
                 )
 
-                product.lowest_price = analysis["lowest_price"]
+                product.lowest_price = (
+                    analysis["lowest_price"]
+                )
 
-                product.average_price = analysis["average_price"]
+                product.average_price = (
+                    analysis["average_price"]
+                )
 
-                product.deal_status = analysis["deal_status"]
+                product.deal_status = (
+                    analysis["deal_status"]
+                )
 
         return ranked_results
