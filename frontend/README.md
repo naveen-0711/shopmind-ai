@@ -1,32 +1,112 @@
-# React + TypeScript + Vite
+# ShopMind AI
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+AI-powered shopping decision engine that helps users **search, compare, and understand products before buying**.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- Natural-language product search
+- Google Shopping product search via SerpApi
+- Product normalization & duplicate detection
+- Multi-store offer comparison
+- Price intelligence & price history
+- Deal detection
+- ShopMind recommendation score
+- Recommendation reasons
+- Best Overall / Best Value / Cheapest / Best Rated / Best Deal
+- Pros & Cons analysis
+- Product details page
+- Automated backend tests
 
-## React Compiler
+## Tech Stack
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+**Frontend**
+- React
+- TypeScript
+- Vite
+- React Router
+- Lucide React
 
-## Expanding the Oxlint configuration
+**Backend**
+- Python 3.10
+- FastAPI
+- Pydantic
+- SQLAlchemy
+- Uvicorn
+- Pytest
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+**Database**
+- PostgreSQL
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
-```
+**External API**
+- SerpApi + Google Shopping
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+## Project Structure
+
+```text
+shopmind-ai/
+├── backend/
+│   ├── app/
+│   │   ├── api/
+│   │   ├── core/
+│   │   ├── db/
+│   │   ├── ingestion/
+│   │   ├── intelligence/
+│   │   ├── models/
+│   │   ├── repositories/
+│   │   ├── schemas/
+│   │   └── services/
+│   ├── tests/
+│   ├── requirements.txt
+│   └── pytest.ini
+│
+├── frontend/
+│   ├── src/
+│   ├── package.json
+│   └── vite.config.ts
+│
+└── README.md
+
+
+### Run Backend
+cd E:\shopmind-ai\backend
+.\.venv\Scripts\Activate.ps1
+uvicorn app.main:app --reload
+
+Backend:
+
+http://127.0.0.1:8000
+
+API docs:
+
+http://127.0.0.1:8000/docs
+Run Frontend
+
+Open another terminal:
+
+cd E:\shopmind-ai\frontend
+npm install
+npm run dev
+
+### Frontend:
+
+http://localhost:5173
+
+
+User
+  ↓
+React Frontend
+  ↓
+FastAPI Backend
+  ↓
+SerpApi / Google Shopping
+  ↓
+Product Processing
+  ├── Normalization
+  ├── Offer Grouping
+  ├── Price Intelligence
+  ├── Deal Detection
+  ├── Ranking
+  ├── Comparison
+  └── Pros & Cons
+  ↓
+Shopping Decision
