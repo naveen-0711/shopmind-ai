@@ -67,11 +67,14 @@ def test_search_response_contains_products():
             {
                 "title": "Example Laptop",
                 "price": 70000,
+                "product_url": "https://example.com/laptop",
+                "source": "Example Store",
             }
         ],
         total=1,
     )
 
     assert response.query == "gaming laptop"
-    assert response.total == 1
     assert len(response.products) == 1
+    assert response.products[0].title == "Example Laptop"
+    assert response.products[0].price == 70000

@@ -62,11 +62,12 @@ class ProductSearchService:
         products: list[Product],
     ) -> list[Product]:
         """
-        Remove duplicate products using product URL and
-        product title as the product identity.
+        Remove duplicate products using product URL
+        and product title as the product identity.
         """
 
         unique_products: list[Product] = []
+
         seen: set[tuple[str, str]] = set()
 
         for product in products:
@@ -88,6 +89,7 @@ class ProductSearchService:
                 continue
 
             seen.add(identity)
+
             unique_products.append(product)
 
         return unique_products
@@ -97,13 +99,16 @@ class ProductSearchService:
         query: str,
         max_price: float | None = None,
         min_rating: float | None = None,
-        limit: int = 10,
+        limit: int = 15,
     ) -> list[Product]:
 
         # -----------------------------------------
         # 1. Parse natural-language query
         # -----------------------------------------
-        parsed_query = self.query_parser.parse(query)
+
+        parsed_query = self.query_parser.parse(
+            query
+        )
 
         search_query = parsed_query.product_query
 
@@ -116,6 +121,7 @@ class ProductSearchService:
         # -----------------------------------------
         # 2. Search providers
         # -----------------------------------------
+
         results: list[Product] = []
 
         for provider in self.providers:
@@ -132,10 +138,12 @@ class ProductSearchService:
 
             for raw_product in raw_products:
 
-                product = self.normalization_service.normalize(
-                    raw_product=raw_product,
-                    product_url=raw_product["product_url"],
-                    source=raw_product["source"],
+                product = (
+                    self.normalization_service.normalize(
+                        raw_product=raw_product,
+                        product_url=raw_product["product_url"],
+                        source=raw_product["source"],
+                    )
                 )
 
                 results.append(product)
@@ -143,10 +151,12 @@ class ProductSearchService:
         # -----------------------------------------
         # 3. Apply final filters
         # -----------------------------------------
+
         filtered_results: list[Product] = []
 
         for product in results:
 
+            # Maximum price filter
             if (
                 max_price is not None
                 and product.price is not None
@@ -154,6 +164,7 @@ class ProductSearchService:
             ):
                 continue
 
+            # Minimum rating filter
             if min_rating is not None:
 
                 if (
@@ -167,24 +178,22 @@ class ProductSearchService:
         # -----------------------------------------
         # 4. Remove duplicate products
         # -----------------------------------------
+
         unique_results = self._deduplicate_products(
             filtered_results
         )
 
         # -----------------------------------------
-        # 5. Rank products
+        # 5. Persist products + price observations
+        #
+        # This happens BEFORE ranking because the
+        # persisted history is required to calculate
+        # deal intelligence.
         # -----------------------------------------
-        ranked_results = self.ranking_service.rank(
-            unique_results,
-            limit=limit,
-        )
 
-        # -----------------------------------------
-        # 6. Persist products + price observations
-        # -----------------------------------------
         if self.persistence_service is not None:
 
-            for product in ranked_results:
+            for product in unique_results:
 
                 self.persistence_service.save_product(
                     title=product.title,
@@ -198,17 +207,23 @@ class ProductSearchService:
                 )
 
         # -----------------------------------------
-        # 7. Analyze price history + deal status
+        # 6. Analyze price history + deal status
+        #
+        # Deal information is calculated BEFORE
+        # ranking so the ranking service can use it.
         # -----------------------------------------
+
         if (
             self.persistence_service is not None
             and self.price_history_service is not None
         ):
 
-            for product in ranked_results:
+            for product in unique_results:
 
                 saved_product = (
-                    self.persistence_service.product_repository.get_by_url(
+                    self.persistence_service
+                    .product_repository
+                    .get_by_url(
                         product.product_url
                     )
                 )
@@ -216,13 +231,18 @@ class ProductSearchService:
                 if saved_product is None:
                     continue
 
-                history = self.price_history_service.get_history(
-                    saved_product.id
+                history = (
+                    self.price_history_service
+                    .get_history(
+                        saved_product.id
+                    )
                 )
 
-                analysis = self.deal_analysis.analyze(
-                    current_price=product.price,
-                    history=history,
+                analysis = (
+                    self.deal_analysis.analyze(
+                        current_price=product.price,
+                        history=history,
+                    )
                 )
 
                 product.lowest_price = (
@@ -236,5 +256,27 @@ class ProductSearchService:
                 product.deal_status = (
                     analysis["deal_status"]
                 )
+
+        # -----------------------------------------
+        # 7. Rank products
+        #
+        # Ranking now has access to:
+        # - rating
+        # - review count
+        # - price
+        # - deal status
+        # - optional historical price information
+        # -----------------------------------------
+
+        ranked_results = (
+            self.ranking_service.rank(
+                unique_results,
+                limit=limit,
+            )
+        )
+
+        # -----------------------------------------
+        # 8. Return ranked products
+        # -----------------------------------------
 
         return ranked_results

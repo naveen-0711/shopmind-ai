@@ -8,7 +8,7 @@ from app.intelligence.recommendation import RecommendationEngine
 class ProductIntelligenceService:
     """
     Combines product quality, price, deal,
-    and recommendation signals.
+    recommendation, and explanation signals.
     """
 
     def __init__(self) -> None:
@@ -46,6 +46,86 @@ class ProductIntelligenceService:
             "quality_score": quality_score,
             "discount_percentage": discount_percentage,
             "recommendation": recommendation,
+        }
+
+    def explain(
+        self,
+        rating: float | None,
+        review_count: int | None,
+        current_price: float | None,
+        reference_price: float | None,
+        deal_status: str = "Unknown",
+    ) -> dict[str, float | list[str]]:
+        """
+        Generates a human-readable explanation for
+        why a product is recommended.
+        """
+
+        analysis = self.analyze(
+            rating=rating,
+            review_count=review_count,
+            current_price=current_price,
+            reference_price=reference_price,
+        )
+
+        reasons: list[str] = []
+
+        quality_score = float(analysis["quality_score"])
+        discount_percentage = float(
+            analysis["discount_percentage"]
+        )
+
+        # Rating signal
+        if rating is not None:
+            if rating >= 4.7:
+                reasons.append("Excellent customer rating")
+            elif rating >= 4.3:
+                reasons.append("Strong customer rating")
+
+        # Review credibility signal
+        if review_count is not None:
+            if review_count >= 5000:
+                reasons.append(
+                    f"Trusted by {review_count:,}+ reviewers"
+                )
+            elif review_count >= 500:
+                reasons.append(
+                    f"Backed by {review_count:,}+ reviews"
+                )
+
+        # Price signal
+        if discount_percentage > 0:
+            reasons.append(
+                f"{discount_percentage:.0f}% below the reference price"
+            )
+
+        # Deal signal
+        normalized_deal_status = deal_status.strip().lower()
+
+        if normalized_deal_status == "great deal":
+            reasons.append("Currently a great deal")
+        elif normalized_deal_status == "good deal":
+            reasons.append("Currently a good deal")
+
+        # Fallback
+        if not reasons:
+            reasons.append(
+                "Matches the available product signals"
+            )
+
+        # Combined explainable score
+        score = min(
+            100.0,
+            max(
+                0.0,
+                quality_score * 0.7
+                + min(discount_percentage, 100.0) * 0.3,
+            ),
+        )
+
+        return {
+            "score": round(score, 2),
+            "reasons": reasons,
         }
 
     def analyze_complete(

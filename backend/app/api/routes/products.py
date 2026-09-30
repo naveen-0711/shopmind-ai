@@ -8,6 +8,16 @@ from app.ingestion.providers.factory import (
 )
 from app.ingestion.resolver import ProductResolver
 
+from app.intelligence.comparison_engine import (
+    ComparisonEngine,
+)
+from app.intelligence.product_intelligence import (
+    ProductIntelligenceService,
+)
+from app.intelligence.pros_cons_engine import (
+    ProsConsEngine,
+)
+
 from app.repositories.price_observation_repository import (
     PriceObservationRepository,
 )
@@ -19,23 +29,33 @@ from app.schemas.product import (
     Product,
     ProductAnalyzeRequest,
 )
+
 from app.schemas.search import (
+    ProductSearchProduct,
     ProductSearchRequest,
     ProductSearchResponse,
+)
+
+from app.services.offer_grouping_service import (
+    OfferGroupingService,
 )
 
 from app.services.product_persistence_service import (
     ProductPersistenceService,
 )
+
 from app.services.product_search_service import (
     ProductSearchService,
 )
+
 from app.services.product_service import (
     ProductService,
 )
+
 from app.services.price_history_service import (
     PriceHistoryService,
 )
+
 from app.services.query_parser import QueryParser
 
 
@@ -104,6 +124,34 @@ query_parser = QueryParser()
 
 
 # ---------------------------------------------------------
+# Offer Grouping
+# ---------------------------------------------------------
+
+offer_grouping_service = OfferGroupingService()
+
+
+# ---------------------------------------------------------
+# Product Intelligence
+# ---------------------------------------------------------
+
+product_intelligence_service = ProductIntelligenceService()
+
+
+# ---------------------------------------------------------
+# Comparison Engine
+# ---------------------------------------------------------
+
+comparison_engine = ComparisonEngine()
+
+
+# ---------------------------------------------------------
+# Pros & Cons Engine
+# ---------------------------------------------------------
+
+pros_cons_engine = ProsConsEngine()
+
+
+# ---------------------------------------------------------
 # Analyze Product
 # ---------------------------------------------------------
 
@@ -149,12 +197,18 @@ async def search_products(
         get_product_search_service,
     ),
 ):
-    # Parse the natural-language query.
+    # -----------------------------------------
+    # 1. Parse natural-language query
+    # -----------------------------------------
+
     parsed_query = query_parser.parse(
         request.query,
     )
 
-    # Search products.
+    # -----------------------------------------
+    # 2. Search products
+    # -----------------------------------------
+
     products = await service.search(
         query=request.query,
         max_price=request.max_price,
@@ -162,14 +216,89 @@ async def search_products(
         limit=request.limit,
     )
 
-    # Return normalized products with
-    # price intelligence included.
+    # -----------------------------------------
+    # 3. Group equivalent products
+    # -----------------------------------------
+
+    grouped_products = (
+        offer_grouping_service.group_products(
+            products,
+        )
+    )
+
+    # -----------------------------------------
+    # 4. Add recommendation + Pros & Cons
+    # -----------------------------------------
+
+    enriched_products: list[ProductSearchProduct] = []
+
+    for product in grouped_products:
+
+        # Recommendation intelligence
+        explanation = product_intelligence_service.explain(
+            rating=product.rating,
+            review_count=product.review_count,
+            current_price=product.price,
+            reference_price=product.average_price,
+            deal_status=product.deal_status,
+        )
+
+        # Create enriched product
+        enriched_product = ProductSearchProduct(
+            **product.model_dump(),
+            recommendation_score=explanation["score"],
+            recommendation_reasons=explanation["reasons"],
+        )
+
+        # Generate Pros & Cons
+        pros_cons = pros_cons_engine.analyze(
+            enriched_product,
+        )
+
+        # Attach Pros & Cons
+        enriched_product.pros = pros_cons["pros"]
+        enriched_product.cons = pros_cons["cons"]
+
+        enriched_products.append(
+            enriched_product,
+        )
+
+    # -----------------------------------------
+    # 5. Compare all products
+    # -----------------------------------------
+
+    comparison = comparison_engine.compare(
+        enriched_products,
+    )
+
+    # -----------------------------------------
+    # 6. Convert comparison models to API data
+    #
+    # ComparisonEngine returns ProductSearchProduct
+    # instances, while ProductComparisonSummary expects
+    # ComparisonProduct models.
+    #
+    # model_dump() creates dictionaries that Pydantic
+    # can validate into ComparisonProduct.
+    # -----------------------------------------
+
+    comparison_response = {
+        key: (
+            value.model_dump()
+            if value is not None
+            else None
+        )
+        for key, value in comparison.items()
+    }
+
+    # -----------------------------------------
+    # 7. Return complete intelligent response
+    # -----------------------------------------
+
     return ProductSearchResponse(
         query=request.query,
         interpreted_query=parsed_query,
-        products=[
-            product.model_dump()
-            for product in products
-        ],
-        total=len(products),
+        products=enriched_products,
+        total=len(enriched_products),
+        comparison=comparison_response,
     )

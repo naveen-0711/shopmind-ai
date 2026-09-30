@@ -293,3 +293,132 @@ async def test_serpapi_provider_skips_invalid_product_data(
 
     assert len(results) == 1
     assert results[0]["title"] == "Valid Phone"
+
+@pytest.mark.asyncio
+async def test_search_prefers_direct_product_link(monkeypatch):
+    provider = SerpApiSearchProvider(
+        api_key="test-key"
+    )
+
+    async def fake_request(query, limit=10):
+        return {
+            "shopping_results": [
+                {
+                    "title": "Samsung Galaxy A17 5G",
+                    "extracted_price": 20499,
+                    "rating": 4.5,
+                    "reviews": 16000,
+                    "thumbnail": "https://example.com/a17.jpg",
+                    "product_link": (
+                        "https://www.samsung.com/in/a17"
+                    ),
+                    "link": (
+                        "https://www.google.com/search?shopping"
+                    ),
+                    "source": "Samsung.com",
+                }
+            ]
+        }
+
+    monkeypatch.setattr(
+        provider,
+        "_request",
+        fake_request,
+    )
+
+    results = await provider.search(
+        query="Samsung phone",
+        limit=10,
+    )
+
+    assert len(results) == 1
+
+    assert results[0]["product_url"] == (
+        "https://www.samsung.com/in/a17"
+    )
+
+
+@pytest.mark.asyncio
+async def test_search_falls_back_to_link_when_product_link_missing(
+    monkeypatch,
+):
+    provider = SerpApiSearchProvider(
+        api_key="test-key"
+    )
+
+    async def fake_request(query, limit=10):
+        return {
+            "shopping_results": [
+                {
+                    "title": "Samsung Galaxy A36 5G",
+                    "extracted_price": 28999,
+                    "rating": 4.7,
+                    "reviews": 17000,
+                    "thumbnail": "https://example.com/a36.jpg",
+                    "link": (
+                        "https://www.samsung.com/in/a36"
+                    ),
+                    "source": "Samsung.com",
+                }
+            ]
+        }
+
+    monkeypatch.setattr(
+        provider,
+        "_request",
+        fake_request,
+    )
+
+    results = await provider.search(
+        query="Samsung phone",
+        limit=10,
+    )
+
+    assert len(results) == 1
+
+    assert results[0]["product_url"] == (
+        "https://www.samsung.com/in/a36"
+    )
+
+
+@pytest.mark.asyncio
+async def test_search_uses_google_link_as_last_resort(
+    monkeypatch,
+):
+    provider = SerpApiSearchProvider(
+        api_key="test-key"
+    )
+
+    google_url = (
+        "https://www.google.com/search?shopping"
+    )
+
+    async def fake_request(query, limit=10):
+        return {
+            "shopping_results": [
+                {
+                    "title": "Samsung Galaxy A23",
+                    "extracted_price": 10000,
+                    "rating": 4.9,
+                    "reviews": 433,
+                    "thumbnail": "https://example.com/a23.jpg",
+                    "link": google_url,
+                    "source": "FoneZone.com",
+                }
+            ]
+        }
+
+    monkeypatch.setattr(
+        provider,
+        "_request",
+        fake_request,
+    )
+
+    results = await provider.search(
+        query="Samsung phone",
+        limit=10,
+    )
+
+    assert len(results) == 1
+
+    assert results[0]["product_url"] == google_url
